@@ -153,6 +153,92 @@
       color: #09090b;
     }
 
+    /* AI 코멘트 관련 스타일 */
+    .ai-comment-box {
+      margin-top: 14px;
+      padding: 10px 12px;
+      background: #f4f4f5;
+      border-radius: 8px;
+      border-left: 3px solid #18181b;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #27272a;
+    }
+    .ai-comment-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .ai-comment-tag {
+      font-size: 11px;
+      font-weight: 600;
+      color: #52525b;
+      letter-spacing: -0.01em;
+    }
+    .ai-comment-del {
+      background: none;
+      border: none;
+      color: #a1a1aa;
+      font-size: 14px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .ai-comment-del:hover {
+      background: #e4e4e7;
+      color: #18181b;
+    }
+    .ai-comment-content {
+      margin: 0;
+      word-break: break-word;
+      font-size: 12.5px;
+      color: #3f3f46;
+    }
+    .ai-btn {
+      background: #ffffff;
+      border: 1px solid #d4d4d8;
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 11.5px;
+      font-family: inherit;
+      color: #3f3f46;
+      cursor: pointer;
+      margin-top: 10px;
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .ai-btn:hover:not(:disabled) {
+      background: #18181b;
+      color: #ffffff;
+      border-color: #18181b;
+    }
+    .ai-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+    .all-ai-btn {
+      background: #ffffff;
+      color: #27272a;
+      border: 1px solid #d4d4d8;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11.5px;
+      font-family: inherit;
+      cursor: pointer;
+      margin-left: 4px;
+      transition: all 0.15s ease;
+    }
+    .all-ai-btn:hover {
+      background: #18181b;
+      color: #ffffff;
+      border-color: #18181b;
+    }
+
     /* 메모 작성 영역 */
     #writer {
       margin: 20px 0 32px;
@@ -177,6 +263,13 @@
     #writer textarea:focus {
       border-color: #18181b;
       box-shadow: 0 0 0 3px rgba(24, 24, 27, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+    #writer textarea:disabled {
+      background: #f4f4f5;
+      color: #a1a1aa;
+      cursor: not-allowed;
+      border-color: #e4e4e7;
+      box-shadow: none;
     }
     #writer textarea::placeholder {
       color: #a1a1aa;
