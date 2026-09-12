@@ -10,6 +10,9 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  getDoc,
+  setDoc,
+  updateDoc,
   onSnapshot,
   query,
   orderBy
@@ -38,14 +41,38 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 
-// 현재 로그인한 사용자 정보 (null이면 로그인 안 됨)
+// 현재 로그인한 사용자 및 역할 정보
 let currentUser = null;
+let currentRole = "student"; // 기본값은 'student' (학생), 'teacher' (교사)
 
-// 로그인 상태 변경 감시
-onAuthStateChanged(auth, function (user) {
+// 로그인 상태 변경 감시 (사용자 역할 확인)
+onAuthStateChanged(auth, async function (user) {
   currentUser = user;
+  if (user) {
+    try {
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        currentRole = userSnap.data().role || "student";
+      } else {
+        // 처음 로그인한 사용자는 기본적으로 student(학생)으로 등록
+        currentRole = "student";
+        await setDoc(userRef, {
+          uid: user.uid,
+          displayName: user.displayName || "익명",
+          role: "student"
+        });
+      }
+    } catch (err) {
+      console.error("사용자 역할 조회 실패:", err);
+      currentRole = "student";
+    }
+  } else {
+    currentRole = "student";
+  }
+
   renderUserArea();
-  render(); // 로그인 사용자에 따라 본인 메모의 삭제 버튼 표시를 갱신합니다.
+  render(); // 로그인 사용자와 역할에 따라 삭제 버튼 표시 갱신
 });
 
 // --- 메모 목록 ---
@@ -78,8 +105,37 @@ function renderUserArea() {
     userArea.innerHTML = "";
 
     const userSpan = document.createElement("span");
-    userSpan.innerHTML = `👋 <strong>${escapeHtml(currentUser.displayName || "사용자")}</strong>님으로 로그인됨`;
+    const roleBadge = currentRole === "teacher"
+      ? `<span class="badge teacher">👩‍🏫 교사 (모든 권한)</span>`
+      : `<span class="badge student">🧑‍🎓 학생 (본인 생성 전용)</span>`;
+
+    userSpan.innerHTML = `👋 <strong>${escapeHtml(currentUser.displayName || "사용자")}</strong>님 ${roleBadge}`;
     userArea.appendChild(userSpan);
+
+    // 버튼 그룹 (역할 전환 및 로그아웃)
+    const btnGroup = document.createElement("div");
+    btnGroup.style.display = "flex";
+    btnGroup.style.alignItems = "center";
+    btnGroup.style.gap = "8px";
+
+    // 실습 테스트용 역할 전환 버튼
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "role-toggle-btn";
+    toggleBtn.textContent = currentRole === "teacher" ? "학생으로 전환" : "교사로 전환";
+    toggleBtn.title = "실습을 위해 교사/학생 역할을 전환합니다";
+    toggleBtn.onclick = async function () {
+      const nextRole = currentRole === "teacher" ? "student" : "teacher";
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid), { role: nextRole });
+        currentRole = nextRole;
+        renderUserArea();
+        render();
+      } catch (err) {
+        console.error("역할 변경 실패:", err);
+        alert("역할 변경 실패: " + err.message);
+      }
+    };
+    btnGroup.appendChild(toggleBtn);
 
     const logoutBtn = document.createElement("button");
     logoutBtn.className = "auth-btn logout";
@@ -91,7 +147,9 @@ function renderUserArea() {
         console.error("로그아웃 오류:", err);
       }
     };
-    userArea.appendChild(logoutBtn);
+    btnGroup.appendChild(logoutBtn);
+
+    userArea.appendChild(btnGroup);
   } else {
     userArea.innerHTML = "";
 
@@ -141,7 +199,7 @@ function loadMemos() {
 
 // 메모를 새로 씁니다.
 // Firestore의 'memos' 컬렉션에 새 문서를 추가합니다.
-// 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
+// 학생은 자기 것만 생성 가능, 교사는 모든 권한을 갖습니다.
 async function addMemo(text) {
   if (!currentUser) {
     alert("메모를 작성하려면 먼저 Google 로그인을 해 주세요.");
@@ -159,7 +217,8 @@ async function addMemo(text) {
       text: text,
       createdAt: Date.now(),
       uid: currentUser.uid,
-      userName: currentUser.displayName || "익명"
+      userName: currentUser.displayName || "익명",
+      role: currentRole
     });
   } catch (error) {
     console.error("메모 저장 실패:", error);
@@ -169,15 +228,18 @@ async function addMemo(text) {
 
 // 메모를 지웁니다.
 // Firestore에서 해당 id의 문서를 삭제합니다.
-// 백엔드 2: 남의 메모를 지울 수 없도록 본인 메모인지 확인합니다.
+// 교사는 모든 메모를 지울 수 있고, 학생은 본인이 작성한 메모만 지울 수 있습니다 (타인 메모 조작 방지).
 async function deleteMemo(id) {
   const targetMemo = memos.find(function (memo) {
     return memo.id === id;
   });
 
-  // 작성자 uid가 있는 메모는 본인만 삭제 가능
-  if (targetMemo && targetMemo.uid && (!currentUser || targetMemo.uid !== currentUser.uid)) {
-    alert("본인이 작성한 메모만 삭제할 수 있습니다.");
+  const isTeacher = currentRole === "teacher";
+  const isOwner = currentUser && targetMemo && targetMemo.uid === currentUser.uid;
+
+  // 학생은 다른 사람의 메모를 삭제할 수 없음
+  if (!isTeacher && targetMemo && targetMemo.uid && !isOwner) {
+    alert("학생은 본인이 작성한 메모만 삭제할 수 있습니다. 다른 사람의 메모는 건드릴 수 없습니다.");
     return;
   }
 
@@ -185,6 +247,7 @@ async function deleteMemo(id) {
     await deleteDoc(doc(db, "memos", id));
   } catch (error) {
     console.error("메모 삭제 실패:", error);
+    alert(`메모 삭제 실패 (${error.code || error.message})`);
   }
 }
 
@@ -207,12 +270,15 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
-  // 본인 메모인 경우 또는 작성자 정보(uid)가 없는 기존 메모인 경우에만 삭제 버튼 표시
-  const isMyMemo = !memo.uid || (currentUser && memo.uid === currentUser.uid);
-  if (isMyMemo) {
+  // 삭제 버튼 표시: 교사는 모든 메모 삭제 가능, 학생은 본인 메모만 삭제 가능
+  const isTeacher = currentRole === "teacher";
+  const isOwner = currentUser && memo.uid === currentUser.uid;
+  const canDelete = isTeacher || isOwner || !memo.uid;
+
+  if (canDelete) {
     const del = document.createElement("button");
     del.textContent = "×";
-    del.title = "삭제하기";
+    del.title = isTeacher ? "교사 권한으로 삭제" : "내 메모 삭제";
     del.onclick = async function () {
       await deleteMemo(memo.id);
     };
@@ -223,13 +289,14 @@ function makeMemo(memo) {
   span.textContent = memo.text;
   div.appendChild(span);
 
-  // 작성자 이름이 있으면 하단 메타 정보로 표시
+  // 작성자 정보 표시 (역할 뱃지 포함)
   if (memo.userName) {
     const meta = document.createElement("div");
     meta.className = "memo-meta";
     const author = document.createElement("span");
     author.className = "memo-author";
-    author.textContent = memo.userName;
+    const roleText = memo.role === "teacher" ? " (교사)" : "";
+    author.textContent = memo.userName + roleText;
     meta.appendChild(author);
     div.appendChild(meta);
   }

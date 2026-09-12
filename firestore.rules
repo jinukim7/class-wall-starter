@@ -2,13 +2,61 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /memos/{memoId} {
-      // 누구나 메모를 읽고 삭제할 수 있습니다.
-      allow read, delete: if true;
 
-      // 메모 등록(create) 및 수정(update) 시 내용(text)이 5글자 이상이어야만 저장됩니다.
-      allow create, update: if request.resource.data.text is string &&
-                               request.resource.data.text.size() >= 5;
+    // --- 사용자 역할 확인 헬퍼 함수 ---
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // users 컬렉션에서 해당 사용자의 정보를 가져옵니다.
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // 교사(teacher)인지 확인: users 문서의 role이 'teacher'이거나 teachers 컬렉션에 등록된 경우
+    function isTeacher() {
+      return isAuth() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         getUserData().role == 'teacher') ||
+        exists(/databases/$(database)/documents/teachers/$(request.auth.uid))
+      );
+    }
+
+    // --- 사용자(users) 컬렉션 규칙 ---
+    match /users/{userId} {
+      // 로그인한 사용자는 역할 정보를 조회할 수 있습니다.
+      allow read: if isAuth();
+      // 본인의 프로필 및 역할을 생성하거나 갱신할 수 있습니다.
+      allow create, update: if isAuth() && request.auth.uid == userId;
+    }
+
+    // --- 메모(memos) 컬렉션 규칙 ---
+    match /memos/{memoId} {
+      // 1. 조회: 누구나 담벼락의 메모를 읽을 수 있습니다.
+      allow read: if true;
+
+      // 2. 생성:
+      //    - 로그인 상태여야 함
+      //    - 5글자 이상 입력 필수
+      //    - 교사는 모든 생성 가능, 학생은 본인 uid로만 생성 가능
+      allow create: if isAuth() &&
+                       request.resource.data.text is string &&
+                       request.resource.data.text.size() >= 5 &&
+                       (isTeacher() || request.resource.data.uid == request.auth.uid);
+
+      // 3. 삭제:
+      //    - 교사: 모든 메모 삭제 가능 (전체 관리 권한)
+      //    - 학생: 본인이 작성한 메모만 삭제 가능 (타인 메모 삭제 불가)
+      allow delete: if isAuth() &&
+                       (isTeacher() || resource.data.uid == request.auth.uid);
+
+      // 4. 수정:
+      //    - 교사: 모든 메모 수정 가능
+      //    - 학생: 본인 메모만 수정 가능 (5글자 이상 조건 유지)
+      allow update: if isAuth() &&
+                       request.resource.data.text is string &&
+                       request.resource.data.text.size() >= 5 &&
+                       (isTeacher() || resource.data.uid == request.auth.uid);
     }
   }
 }
