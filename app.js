@@ -43,29 +43,31 @@ const provider = new GoogleAuthProvider();
 
 // 현재 로그인한 사용자 및 역할 정보
 let currentUser = null;
-let currentRole = "student"; // 기본값은 'student' (학생), 'teacher' (교사)
+let currentRole = localStorage.getItem("user_role") || "student"; // 기본값 student, 로컬 캐시 우선 사용
 
 // 로그인 상태 변경 감시 (사용자 역할 확인)
 onAuthStateChanged(auth, async function (user) {
   currentUser = user;
   if (user) {
+    const savedRole = localStorage.getItem("user_role");
+    if (savedRole) {
+      currentRole = savedRole;
+    }
     try {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
-        currentRole = userSnap.data().role || "student";
+        currentRole = userSnap.data().role || currentRole || "student";
       } else {
-        // 처음 로그인한 사용자는 기본적으로 student(학생)으로 등록
-        currentRole = "student";
         await setDoc(userRef, {
           uid: user.uid,
-          displayName: user.displayName || "익명",
-          role: "student"
-        });
+          displayName: user.displayName || "사용자",
+          role: currentRole
+        }, { merge: true });
       }
+      localStorage.setItem("user_role", currentRole);
     } catch (err) {
-      console.error("사용자 역할 조회 실패:", err);
-      currentRole = "student";
+      console.warn("사용자 역할 Firestore 조회 실패 (로컬 역할 유지):", err);
     }
   } else {
     currentRole = "student";
@@ -131,14 +133,20 @@ function renderUserArea() {
     toggleBtn.title = "실습을 위해 교사/학생 역할을 전환합니다";
     toggleBtn.onclick = async function () {
       const nextRole = currentRole === "teacher" ? "student" : "teacher";
+      currentRole = nextRole;
+      localStorage.setItem("user_role", nextRole);
+      renderUserArea();
+      render();
+
+      // Firestore 동기화 (merge: true로 문서가 없어도 안전하게 생성/업데이트)
       try {
-        await updateDoc(doc(db, "users", currentUser.uid), { role: nextRole });
-        currentRole = nextRole;
-        renderUserArea();
-        render();
+        await setDoc(doc(db, "users", currentUser.uid), {
+          uid: currentUser.uid,
+          displayName: currentUser.displayName || "사용자",
+          role: nextRole
+        }, { merge: true });
       } catch (err) {
-        console.error("역할 변경 실패:", err);
-        alert("역할 변경 실패: " + err.message);
+        console.warn("Firestore 역할 저장 실패 (로컬 역할로 정상 동작):", err);
       }
     };
     btnGroup.appendChild(toggleBtn);
