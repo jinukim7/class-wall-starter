@@ -46,8 +46,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 무료 티어로 제공되는 gemini-1.5-flash 모델 엔드포인트
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 무료 티어로 제공되는 최신 flash 모델 (gemini-flash-latest) 엔드포인트
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
     // 교사 관점의 따뜻한 칭찬/피드백 프롬프트 (개인정보는 포함되지 않음)
     const prompt = `당신은 초·중등학교의 따뜻하고 지혜로운 선생님입니다.
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
         ],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 150
+          maxOutputTokens: 1000
         }
       })
     });
