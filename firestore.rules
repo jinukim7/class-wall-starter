@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /memos/{memoId} {
+      // 누구나 메모를 읽고 삭제할 수 있습니다.
+      allow read, delete: if true;
+
+      // 메모 등록(create) 및 수정(update) 시 내용(text)이 5글자 이상이어야만 저장됩니다.
+      allow create, update: if request.resource.data.text is string &&
+                               request.resource.data.text.size() >= 5;
+    }
+  }
+}
